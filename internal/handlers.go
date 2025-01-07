@@ -1,103 +1,108 @@
 package internal
 
 import (
-	"encoding/json"
 	"net/http"
 	"strconv"
-
-	"github.com/gorilla/mux"
-	"gorm.io/gorm"
+	"text/template"
 )
 
-type ErrorResponse struct {
-	Message string `json:"message"`
+type TemplateData struct {
+	Books  []Book
+	Error  string
+	FormID string
+	Form   Book
 }
 
-type SuccessResponse struct {
-	Message string `json:"message"`
-	Data    any    `json:"data,omitempty"`
-}
-
-func GetBooks(w http.ResponseWriter, r *http.Request) {
+// RenderBooks renders the main page with the list of books
+func RenderBooks(w http.ResponseWriter, r *http.Request, errorMsg string, formBook *Book) {
 	var books []Book
 	DB.Find(&books)
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(SuccessResponse{Message: "Books retrieved successfully", Data: books})
+	tmpl, err := template.ParseFiles("templates/index.html")
+	if err != nil {
+		http.Error(w, "Error rendering template", http.StatusInternalServerError)
+		return
+	}
+
+	data := TemplateData{
+		Books: books,
+		Error: errorMsg,
+	}
+
+	if formBook != nil {
+		data.Form = *formBook
+		data.FormID = strconv.Itoa(int(formBook.ID))
+	}
+
+	tmpl.Execute(w, data)
 }
 
-func GetBook(w http.ResponseWriter, r *http.Request) {
-	params := mux.Vars(r)
-	id, _ := strconv.Atoi(params["id"])
+// HandleAddOrUpdate processes adding or updating books
+func HandleAddOrUpdate(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPost {
+		id := r.FormValue("id")
+		title := r.FormValue("title")
+		author := r.FormValue("author")
+		year, err := strconv.Atoi(r.FormValue("year"))
 
-	var book Book
-	if err := DB.First(&book, id).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			http.Error(w, "Book not found", http.StatusNotFound)
+		if err != nil || title == "" || author == "" || year == 0 {
+			RenderBooks(w, r, "All fields are required", nil)
 			return
 		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(SuccessResponse{Message: "Book retrieved successfully", Data: book})
+		if id == "" {
+			// Add a new book
+			book := Book{Title: title, Author: author, Year: year}
+			DB.Create(&book)
+		} else {
+			// Update an existing book
+			var book Book
+			if err := DB.First(&book, id).Error; err != nil {
+				RenderBooks(w, r, "Book not found", nil)
+				return
+			}
+			book.Title = title
+			book.Author = author
+			book.Year = year
+			DB.Save(&book)
+		}
+
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+	}
 }
 
-func CreateBook(w http.ResponseWriter, r *http.Request) {
-	var book Book
-	if err := json.NewDecoder(r.Body).Decode(&book); err != nil {
-		http.Error(w, "Invalid input", http.StatusBadRequest)
-		return
-	}
-
-	if book.Title == "" || book.Author == "" || book.Year == 0 {
-		http.Error(w, "Title, Author, and Year are required fields", http.StatusBadRequest)
-		return
-	}
-
-	DB.Create(&book)
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(SuccessResponse{Message: "Book created successfully", Data: book})
-}
-
-func UpdateBook(w http.ResponseWriter, r *http.Request) {
-	params := mux.Vars(r)
-	id, _ := strconv.Atoi(params["id"])
-
-	var book Book
-	if err := DB.First(&book, id).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			http.Error(w, "Book not found", http.StatusNotFound)
+// HandleDelete processes deleting books by ID
+func HandleDelete(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPost {
+		id := r.FormValue("delete-id")
+		var book Book
+		if err := DB.First(&book, id).Error; err != nil {
+			RenderBooks(w, r, "Book not found", nil)
 			return
 		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		DB.Delete(&book)
+
+		http.Redirect(w, r, "/", http.StatusSeeOther)
 	}
-
-	json.NewDecoder(r.Body).Decode(&book)
-	DB.Save(&book)
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(SuccessResponse{Message: "Book updated successfully", Data: book})
 }
 
-func DeleteBook(w http.ResponseWriter, r *http.Request) {
-	params := mux.Vars(r)
-	id, _ := strconv.Atoi(params["id"])
-
-	var book Book
-	if err := DB.First(&book, id).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			http.Error(w, "Book not found", http.StatusNotFound)
+// HandleGetByID processes retrieving a book by ID
+func HandleGetByID(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPost {
+		id := r.FormValue("get-id")
+		bookID, err := strconv.Atoi(id)
+		if err != nil {
+			RenderBooks(w, r, "Invalid Book ID", nil)
 			return
 		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
 
-	DB.Delete(&book)
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(SuccessResponse{Message: "Book deleted successfully"})
+		var book Book
+		if err := DB.First(&book, bookID).Error; err != nil {
+			RenderBooks(w, r, "Book not found", nil)
+			return
+		}
+
+		// Render page with the retrieved book's data in the form without redirect
+		RenderBooks(w, r, "", &book)
+	}
 }
