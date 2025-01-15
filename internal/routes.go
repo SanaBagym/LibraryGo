@@ -3,8 +3,12 @@ package internal
 import (
 	"github.com/gorilla/mux"
 )
+import (
+    "net/http"
+)
 
 func SetupRoutes(r *mux.Router) {
+
 	r.HandleFunc("/", RenderHome).Methods("GET")
 
 	r.HandleFunc("/add", RenderAddPage).Methods("GET")
@@ -20,4 +24,11 @@ func SetupRoutes(r *mux.Router) {
 	r.HandleFunc("/get", HandleGet).Methods("POST")
 
 	r.HandleFunc("/books", RenderAllBooksPage).Methods("GET")
+}
+func RegisterRoutes() {
+    http.HandleFunc("/admin", RenderAdminPage)
+    http.HandleFunc("/admin/send", HandleAdminSend)
+
+    http.HandleFunc("/profile", RenderProfilePage)
+    http.HandleFunc("/profile/support", HandleSupportMessage)
 }

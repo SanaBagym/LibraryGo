@@ -7,6 +7,8 @@ import (
 	"sync"
 	"text/template"
 	"time"
+	"fmt"
+	"net/smtp"
 )
 
 var deleteRateLimit = make(map[string]time.Time)
@@ -185,4 +187,74 @@ func RenderAllBooksPage(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("[INFO] All books fetched with sort param: %s", sortParam)
 	renderTemplate(w, "all_books.html", books)
+}
+func RenderAdminPage(w http.ResponseWriter, r *http.Request) {
+	renderTemplate(w, "admin.html", nil)
+}
+
+// Admin Panel: Handle Email Sending
+func HandleAdminSend(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Redirect(w, r, "/admin", http.StatusSeeOther)
+		return
+	}
+
+	subject := r.FormValue("subject")
+	message := r.FormValue("message")
+	recipient := r.FormValue("recipient") // Can be a list or single email
+
+	err := SendEmail(recipient, subject, message)
+	if err != nil {
+		http.Redirect(w, r, "/admin?error=Failed to send email", http.StatusSeeOther)
+		return
+	}
+
+	http.Redirect(w, r, "/admin?success=Email sent successfully", http.StatusSeeOther)
+}
+
+// User Profile: Render Page
+func RenderProfilePage(w http.ResponseWriter, r *http.Request) {
+	renderTemplate(w, "profile.html", nil)
+}
+
+// User Profile: Handle Support Message
+func HandleSupportMessage(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Redirect(w, r, "/profile", http.StatusSeeOther)
+		return
+	}
+
+	subject := r.FormValue("subject")
+	message := r.FormValue("message")
+	user := r.FormValue("user") // Can include user information for tracking
+
+	err := SendEmail("support@example.com", subject, "From: "+user+"\n\n"+message)
+	if err != nil {
+		http.Redirect(w, r, "/profile?error=Failed to send message", http.StatusSeeOther)
+		return
+	}
+
+	http.Redirect(w, r, "/profile?success=Message sent to support", http.StatusSeeOther)
+}
+
+
+// SendEmail отправляет письмо на указанный адрес.
+func SendEmail(to, subject, body string) error {
+	// Укажите данные вашей SMTP-конфигурации.
+	from := "bagymsana@gmail.com"         // Ваш email
+	password := "awhq eaef xcun fpgb"       // Пароль
+	smtpServer := "smtp.gmail.com"        // SMTP-сервер
+	port := "587"                           // Порт
+
+	// Формируем сообщение.
+	msg := fmt.Sprintf("From: %s\nTo: %s\nSubject: %s\n\n%s", from, to, subject, body)
+	auth := smtp.PlainAuth("", from, password, smtpServer)
+
+	// Отправка письма.
+	err := smtp.SendMail(smtpServer+":"+port, auth, from, []string{to}, []byte(msg))
+	if err != nil {
+		return fmt.Errorf("failed to send email: %w", err)
+	}
+
+	return nil
 }

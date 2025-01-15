@@ -1,0 +1,15 @@
+<h2>User Profile</h2>
+
+<h3>Contact Support</h3>
+<form action="/profile/contact-support" method="post" enctype="multipart/form-data">
+    <label for="subject">Subject:</label>
+    <input type="text" id="subject" name="subject" required>
+
+    <label for="message">Message:</label>
+    <textarea id="message" name="message" required></textarea>
+
+    <label for="attachment">Attachment (optional):</label>
+    <input type="file" id="attachment" name="attachment">
+
+    <button type="submit">Send</button>
+</form>
